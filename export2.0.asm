@@ -75,7 +75,7 @@ _LABEL_28_:
 .db $FF
 
 _LABEL_38_:
-	jp _LABEL_3BF_
+	jp _LABEL_3B7_
 
 ; Data from 3B to 4C (18 bytes)
 .db $E7 $79 $B7 $28 $01 $04 $78 $41 $0E $BE $ED $A3 $20 $FC $3D $20
@@ -119,7 +119,7 @@ _LABEL_6D_:
 	ld (hl), $00
 	ldir
 	ld b, $0E
-	call _LABEL_361_
+	call _LABEL_366_
 _LABEL_93_:
 	ld hl, $0488
 	ld bc, $18BF
@@ -132,12 +132,12 @@ _LABEL_93_:
 	ld ($C300), a
 	ei
 	ld a, $03
-	call _LABEL_42E_
+	call _LABEL_426_
 	di
 	ld de, $4000
 	ld bc, $0020
 	rst $28	; _LABEL_28_
-	call _LABEL_4EE_
+	call _LABEL_4E6_
 	ld de, $67E0
 	ld bc, $0020
 	rst $28	; _LABEL_28_
@@ -145,31 +145,31 @@ _LABEL_93_:
 	ld de, $4360
 	ld bc, $0228
 	ld a, $09
-	call _LABEL_469_
+	call _LABEL_461_
 	ld hl, $1934
 	ld de, $4C00
-	call _LABEL_4A0_
+	call _LABEL_498_
 	xor a
 	ld ($C202), a
 	ld de, $7A16
 	ld hl, $0FC3
 	ld bc, $040A
-	call _LABEL_459_
+	call _LABEL_451_
 	ld a, $81
 	ld ($CF00), a
 	ld de, $4EC0
 	ld hl, $1030
-	call _LABEL_4A0_
+	call _LABEL_498_
 	ld hl, $15CD
 	ld de, $4060
-	call _LABEL_4A0_
-	call _LABEL_528_
+	call _LABEL_498_
+	call _LABEL_520_
 	call _LABEL_1D_
-	call _LABEL_505_
+	call _LABEL_4FD_
 	di
-	ld hl, $0288
+	ld hl, RAMCode
 	ld de, $C700
-	ld bc, $00D9
+	ld bc, RAMCodeEnd-RAMCode
 	ldir
 	call $C700	; Possibly invalid
 	ld a, ($C000)
@@ -180,26 +180,26 @@ _LABEL_93_:
 	or a
 	sbc hl, de
 	jp z, $C7C0	; Possibly invalid
-	call _LABEL_4EE_
+	call _LABEL_4E6_
 	ld hl, $0175
 	ld b, $03
-	call _LABEL_169_
+	call _LABEL_16A_
 -:
 	jr -
 
 +:
-	call _LABEL_161_
+	call _LABEL_162_
 -:
 	ei
 	ld a, $80
-	call _LABEL_42E_
+	call _LABEL_426_
 	ld a, ($C207)
 	and $31
 	cp $31
-	jp z, _LABEL_B98_
+	jp z, _LABEL_B90_
 	jr -
 
-_LABEL_14C_:
+_LABEL_14D_:
 	ld de, $7D54
 	ld b, $0B
 	ld hl, $0156
@@ -209,11 +209,11 @@ _LABEL_14C_:
 ; Data from 156 to 160 (11 bytes)
 .db $1B $20 $1C $1D $1E $1F $20 $31 $39 $38 $36
 
-_LABEL_161_:
-	call _LABEL_4EE_
+_LABEL_162_:
+	call _LABEL_4E6_
 	ld b, $0C
 	ld hl, $01A2
-_LABEL_169_:
+_LABEL_16A_:
 	push bc
 	ld e, (hl)
 	inc hl
@@ -223,7 +223,7 @@ _LABEL_169_:
 	inc hl
 	rst $10	; _LABEL_10_
 	pop bc
-	djnz _LABEL_169_
+	djnz _LABEL_16A_
 	ret
 
 ; Data from 175 to 360 (492 bytes)
@@ -244,32 +244,23 @@ _LABEL_169_:
 .db $57 $45 $52 $20 $42 $41 $43 $4B $20 $4F $4E $2C $41 $4E $44 $2E
 .db $2E $2E $2E $92 $7D $0D $60 $61 $62 $63 $64 $65 $66 $67 $68 $69
 .db $63 $63 $63 $D2 $7D $0D $6A $6B $6C $6D $6E $6F $70 $71 $72 $00
-.db $73 $73 $73 $DB $DC $21 $4D $C7 $06 $03 $3E $EB $D3 $3E $7E $32
-.db $00 $C0 $D3 $3E $D9 $CD $26 $C7 $D9 $23 $10 $EE $AF $32 $00 $C0
-.db $3E $EB $D3 $3E $3E $E3 $D3 $3E $C9 $21 $00 $00 $01 $01 $02 $11
-.db $C0 $C9 $ED $B0 $3A $C0 $C9 $21 $C1 $C9 $01 $00 $02 $ED $A1 $20
-.db $04 $E2 $3A $C7 $C9 $F1 $18 $D8 $54 $4D $52 $20 $53 $45 $47 $41
-.db $CB $AB $6B $11 $00 $00 $3A $6F $C2 $4F $E6 $F0 $FE $40 $28 $08
-.db $2A $70 $C2 $23 $22 $6A $C2 $C9 $79 $D6 $0A $E6 $0F $F5 $21 $B3
-.db $C7 $4F $06 $00 $09 $46 $0E $F0 $21 $00 $00 $CD $A5 $C7 $ED $53
-.db $70 $C2 $F1 $D6 $04 $D8 $4F $06 $00 $21 $BC $C7 $09 $46 $3E $02
-.db $C5 $32 $FF $FF $3C $F5 $CD $9F $C7 $F1 $C1 $10 $F3 $ED $53 $70
-.db $C2 $C9 $01 $00 $40 $21 $00 $80 $7B $86 $5F $7A $CE $00 $57 $23
-.db $0B $78 $B1 $20 $F3 $C9 $1F $3F $7F $BF $7F $7F $7F $7F $7F $02
-.db $06 $0E $1E $21 $AC $03 $22 $03 $C2 $3E $03 $FB $CD $2E $04 $F3
-.db $3E $EB $D3 $3E $3A $00 $C0 $D3 $3E $C3 $00 $00
+.db $73 $73 $73 
 
-_LABEL_361_:
+RAMCode:
+.include "export2.0.ram.asm"
+RAMCodeEnd:
+
+_LABEL_366_:
 	ld de, $4000
 -:
 	dec de
 	ld a, d
 	or e
 	jr nz, -
-	djnz _LABEL_361_
+	djnz _LABEL_366_
 	ret
 
-_LABEL_36C_:
+_LABEL_377_:
 	di
 	ld sp, $DFF0
 	ld hl, $C000
@@ -289,11 +280,11 @@ _LABEL_36C_:
 .db $00 $00 $00 $10 $10 $C0 $00 $00 $00 $00 $00 $00 $00 $00 $00 $00
 .db $00 $00 $00 $00 $00 $00
 
-_LABEL_3BF_:
+_LABEL_3B7_:
 	push af
 	in a, ($BF)
 	rlca
-	jp nc, _LABEL_41E_
+	jp nc, _LABEL_416_
 	push bc
 	push de
 	push hl
@@ -315,7 +306,7 @@ _LABEL_3BF_:
 	ld (hl), a
 	xor c
 	and c
-	jp nz, _LABEL_36C_
+	jp nz, _LABEL_377_
 +:
 	ld a, ($C200)
 	rrca
@@ -323,15 +314,15 @@ _LABEL_3BF_:
 	call c, _LABEL_4D_
 	pop af
 	rrca
-	call c, _LABEL_437_
+	call c, _LABEL_42F_
 	rrca
 	push af
-	call c, _LABEL_57F_
+	call c, _LABEL_577_
 	call _LABEL_4F8_
 	pop af
 	rrca
 	push af
-	call c, _LABEL_D32_
+	call c, _LABEL_D2A_
 	pop af
 	rrca
 	call c, _LABEL_D67_
@@ -353,7 +344,7 @@ _LABEL_3BF_:
 	ei
 	ret
 
-_LABEL_41E_:
+_LABEL_416_:
 	push de
 	ld de, ($C225)
 	ld d, $88
@@ -365,7 +356,7 @@ _LABEL_41E_:
 	ei
 	ret
 
-_LABEL_42E_:
+_LABEL_426_:
 	ld hl, $C200
 	ld (hl), a
 -:
@@ -374,7 +365,7 @@ _LABEL_42E_:
 	jr nz, -
 	ret
 
-_LABEL_437_:
+_LABEL_42F_:
 	ld hl, ($C203)
 	ld b, (hl)
 	inc hl
@@ -391,7 +382,7 @@ _LABEL_437_:
 .db $E7 $DB $BE $C9 $E7 $DB $BE $77 $E3 $E3 $DB $BE $23 $0B $78 $B1
 .db $20 $F3 $C9
 
-_LABEL_459_:
+_LABEL_451_:
 	ld a, c
 	ld c, b
 	ld b, a
@@ -407,7 +398,7 @@ _LABEL_459_:
 	jr nz, -
 	ret
 
-_LABEL_469_:
+_LABEL_461_:
 	ld ($C201), a
 	rst $20	; _LABEL_20_
 --:
@@ -436,7 +427,7 @@ _LABEL_469_:
 .db $36 $80 $A0 $81 $FF $82 $FF $83 $FF $84 $FF $85 $FB $86 $00 $88
 .db $00 $89 $FF $8A $00 $87 $10 $C0
 
-_LABEL_4A0_:
+_LABEL_498_:
 	ld b, $04
 -:
 	push bc
@@ -482,7 +473,7 @@ _LABEL_4AD_:
 .db $AF $32 $2A $C2 $32 $26 $C2 $F3 $21 $20 $C2 $7E $B7 $C8 $36 $00
 .db $3A $2A $C2 $5F $16 $89 $E7 $3A $26 $C2 $5F $15 $E7 $C9
 
-_LABEL_4EE_:
+_LABEL_4E6_:
 	ld de, $7800
 	ld bc, $0700
 	ld l, $00
@@ -501,18 +492,18 @@ _LABEL_4F8_:
 	ld (hl), a
 	ret
 
-_LABEL_505_:
+_LABEL_4FD_:
 	ld a, $05
-	call _LABEL_42E_
+	call _LABEL_426_
 	ld a, ($CF02)
 	or a
-	jr z, _LABEL_505_
+	jr z, _LABEL_4FD_
 	ld de, $7B8A
 	ld hl, $0FEB
 	ld bc, $0317
 	di
-	call _LABEL_459_
-	call _LABEL_14C_
+	call _LABEL_451_
+	call _LABEL_14D_
 	ei
 -:
 	ld a, ($CF01)
@@ -520,7 +511,7 @@ _LABEL_505_:
 	jr z, -
 	ret
 
-_LABEL_528_:
+_LABEL_520_:
 	ld a, $03
 	ld ($C201), a
 	ld a, $F0
@@ -558,13 +549,13 @@ _LABEL_528_:
 +:
 	djnz --
 	ld a, $01
-	jp _LABEL_42E_
+	jp _LABEL_426_
 
 ; Data from 56B to 57E (20 bytes)
 .db $38 $40 $48 $50 $47 $FE $5A $FE $6C $FE $7E $FE $4F $FF $62 $FF
 .db $74 $FF $86 $FF
 
-_LABEL_57F_:
+_LABEL_577_:
 	ld hl, $C201
 	dec (hl)
 	ret nz
@@ -1190,7 +1181,7 @@ _LABEL_97B_:
 .db $0B $FF $02 $FF $ED $DC $CB $BA $A9 $02 $EF $FF $FF $EE $02 $50
 .db $0B $8E $09 $E5 $09 $5E $0A $EA $0A $FF
 
-_LABEL_B98_:
+_LABEL_B90_:
 	ld a, $FF
 	ld ($C20B), a
 	ld hl, $0D9B
@@ -1216,7 +1207,7 @@ _LABEL_BBD_:
 	call _LABEL_D7E_
 	ei
 	ld a, $10
-	call _LABEL_42E_
+	call _LABEL_426_
 	ld ix, $C400
 	call _LABEL_F2F_
 	ld (ix+7), $08
@@ -1240,7 +1231,7 @@ _LABEL_BBD_:
 	ld ($CF00), a
 -:
 	ld a, $11
-	call _LABEL_42E_
+	call _LABEL_426_
 	call _LABEL_EA1_
 	ld hl, $C234
 	ld a, (hl)
@@ -1278,7 +1269,7 @@ _LABEL_BBD_:
 	ei
 	pop bc
 	djnz --
-	jp _LABEL_36C_
+	jp _LABEL_377_
 
 +:
 	ld (hl), $00
@@ -1329,14 +1320,14 @@ _LABEL_BBD_:
 	call _LABEL_CC2_
 	ld bc, $0080
 	call _LABEL_CC2_
-	jp _LABEL_36C_
+	jp _LABEL_377_
 
 ; Data from CB2 to CC1 (16 bytes)
 .db $43 $4F $4E $47 $52 $41 $54 $55 $4C $41 $54 $49 $4F $4E $53 $21
 
 _LABEL_CC2_:
 	ld a, c
-	call _LABEL_42E_
+	call _LABEL_426_
 	djnz _LABEL_CC2_
 	ret
 
@@ -1398,7 +1389,7 @@ _LABEL_CC9_:
 	rst $20	; _LABEL_20_
 -:
 	ld a, $08
-	call _LABEL_42E_
+	call _LABEL_426_
 	ld a, ($C244)
 	or a
 	jr nz, -
@@ -1408,7 +1399,7 @@ _LABEL_CC9_:
 	rst $20	; _LABEL_20_
 	ret
 
-_LABEL_D32_:
+_LABEL_D2A_:
 	ld de, $8800
 	rst $20	; _LABEL_20_
 	ld de, $8A37

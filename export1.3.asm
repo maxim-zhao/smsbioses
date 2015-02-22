@@ -167,9 +167,9 @@ _LABEL_93_:
 	call _LABEL_1D_
 	call _LABEL_4FD_
 	di
-	ld hl, $0289
+	ld hl, RAMCode
 	ld de, $C700
-	ld bc, $00DD
+	ld bc, RAMCodeEnd-RAMCode
 	ldir
 	call $C700	; Possibly invalid
 	di
@@ -245,20 +245,11 @@ _LABEL_16A_:
 .db $57 $45 $52 $20 $42 $41 $43 $4B $20 $4F $4E $2C $41 $4E $44 $2E
 .db $2E $2E $2E $92 $7D $0D $60 $61 $62 $63 $64 $65 $66 $67 $68 $69
 .db $63 $63 $63 $D2 $7D $0D $6A $6B $6C $6D $6E $6F $70 $71 $72 $00
-.db $73 $73 $73 $DB $DC $21 $5E $C7 $06 $03 $3E $EB $D3 $3E $7E $32
-.db $00 $C0 $D3 $3E $D9 $CD $36 $C7 $CD $31 $C7 $CD $2C $C7 $D9 $23
-.db $10 $E8 $AF $32 $00 $C0 $3E $EB $D3 $3E $3E $E3 $D3 $3E $C9 $21
-.db $F0 $1F $18 $08 $21 $F0 $3F $18 $03 $21 $F0 $7F $11 $60 $C2 $01
-.db $10 $00 $ED $B0 $21 $56 $C7 $11 $60 $C2 $06 $08 $1A $BE $C0 $23
-.db $13 $10 $F9 $CD $61 $C7 $F1 $18 $CD $54 $4D $52 $20 $53 $45 $47
-.db $41 $CB $AB $6B $11 $00 $00 $3A $6F $C2 $4F $E6 $F0 $FE $40 $28
-.db $08 $2A $70 $C2 $23 $22 $6A $C2 $C9 $79 $D6 $0A $E6 $0F $F5 $21
-.db $C4 $C7 $4F $06 $00 $09 $46 $0E $F0 $21 $00 $00 $CD $B6 $C7 $ED
-.db $53 $70 $C2 $F1 $D6 $04 $D8 $4F $06 $00 $21 $CD $C7 $09 $46 $3E
-.db $02 $C5 $32 $FF $FF $3C $F5 $CD $B0 $C7 $F1 $C1 $10 $F3 $ED $53
-.db $70 $C2 $C9 $01 $00 $40 $21 $00 $80 $7B $86 $5F $7A $CE $00 $57
-.db $23 $0B $78 $B1 $20 $F3 $C9 $1F $3F $7F $BF $7F $7F $7F $7F $7F
-.db $02 $06 $0E $1E $3E $EB $D3 $3E $3A $00 $C0 $D3 $3E $C3 $00 $00
+.db $73 $73 $73 
+
+RAMCode:
+.include "export1.3.ram.asm"
+RAMCodeEnd:
 
 _LABEL_366_:
 	ld de, $4000
