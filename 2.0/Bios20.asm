@@ -93,11 +93,11 @@ Unused_C20C        dsb 20
 ResetScrollRegFlag db
 Unused_C221        dsb 4
 MazeScrollH        db
-ResetScrollY_Val   db
+ResetScrollX_Val   db
 Unused_C227        dsb 1
 MazeDebugVar       db
 Unused_C229        dsb 1
-ResetScrollX_Val   db
+ResetScrollY_Val   db
 Unused_C22B        dsb 5
 RoundNumberDCB     db
 RoundNumber        db
@@ -871,19 +871,19 @@ RepeatMode:
 
 ResetScrollRegisters:               ; (UNUSED IN THIS BIOS)
     xor a
-    ld (ResetScrollX_Val), a        ; zeroes these two variables
-    ld (ResetScrollY_Val), a
+    ld (ResetScrollY_Val), a        ; zeroes these two variables
+    ld (ResetScrollX_Val), a
     di
     ld hl, ResetScrollRegFlag
     ld a, (hl)                      ; if ResetScrollRegFlag = 0, return
     or a
     ret z
     ld (hl), $00                    ; else set the ResetScrollRegFlag to 0
-    ld a, (ResetScrollX_Val)
+    ld a, (ResetScrollY_Val)
     ld e, a
     LD_D_VDP_REG_NUM $09
     rst $20                         ; write 0 to VDP register #9 (Y scroll)
-    ld a, (ResetScrollY_Val)
+    ld a, (ResetScrollX_Val)
     ld e, a
     dec d
     rst $20                         ; write 0 to VDP register #8 (X scroll)
@@ -1555,8 +1555,8 @@ SoundRoutineE1:                     ; end of voice
     ld (ix + Voice.flags), a        ; disable voice update
     call SilenceChannel             ; and silence corresponding PSG channel
     pop hl
-    pop hl
-    ret
+    pop hl                          ; skip 2 levels of callstack so instead of returning to SoundRoutineRetsHere,
+    ret                             ; we return to the ld de, $20 instruction in UpdateSoundLoop
 
 SilenceChannel:
     ld a, (ix + Voice.PSGChannel)

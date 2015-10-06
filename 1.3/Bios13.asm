@@ -7,6 +7,8 @@
 ; * ROM detection comments and PSG tones table by Maxim:
 ; http://www.smspower.org/maxim/forumstuff/psgtable.html
 ; http://www.smspower.org/forums/6706-USBIOSDisassembly
+; * Thanks to Calindro for info about Alex Kidd in M. World
+; * Thanks to Calindro & Maxim for info about sound engines
 ;-------------------------------------------------------------
 
 .MEMORYMAP
@@ -32,6 +34,44 @@ BANKS 1
 .DEFINE IO_1_Port       $dc
 .DEFINE IO_2_Port       $dd
 
+; Flags passed to interrupt handler
+.DEFINE UpdateSAT         $01
+.DEFINE UpdateGraphics    $02
+.DEFINE UpdateLogoScroll  $04
+.DEFINE UpdateMazeCol     $08
+.DEFINE UpdateMazeTime    $10
+
+.DEFINE VDP_WriteVRAM   $4000
+.DEFINE VDP_WriteReg    $8000
+.DEFINE VDP_WriteCRAM   $c000
+.DEFINE TileMap_Base    $3800
+.DEFINE TileMapVRAM     TileMap_Base | VDP_WriteVRAM
+.DEFINE SpriteVRAM      $3f00 | VDP_WriteVRAM
+
+.MACRO TILEMAP_XY ARGS x, y
+.dw TileMapVRAM + (y*32 + x)*2
+.ENDM
+
+.MACRO LD_DE_TILEMAP_XY ARGS x, y
+    ld de, TileMapVRAM + (y*32 + x)*2
+.ENDM
+
+.MACRO LD_DE_PATTERN_ADDR ARGS idx
+    ld de, VDP_WriteVRAM | (idx*32)
+.ENDM
+
+.MACRO LD_DE_VDP_REG_VAL ARGS reg, val
+    ld de,  VDP_WriteReg | (reg << 8) | val
+.ENDM
+
+.MACRO LD_D_VDP_REG_NUM ARGS reg
+    ld d, >VDP_WriteReg | reg
+.ENDM
+
+.MACRO VDP_REG_VAL ARGS reg, val
+.dw VDP_WriteReg | (reg << 8) | val
+.ENDM
+
 ;-------------------------------------------------------------
 ;  RAM USAGE
 ;-------------------------------------------------------------
@@ -55,11 +95,11 @@ Unused_C20C        dsb 20
 ResetScrollRegFlag db
 Unused_C221        dsb 4
 MazeScrollH        db
-ResetScrollY_Val   db
+ResetScrollX_Val   db
 Unused_C227        dsb 1
 MazeDebugVar       db
 Unused_C229        dsb 1
-ResetScrollX_Val   db
+ResetScrollY_Val   db
 Unused_C22B        dsb 5
 RoundNumberDCB     db
 RoundNumber        db
@@ -147,7 +187,7 @@ Voice3             INSTANCEOF Voice
 .ORG $0000
     di                              ; disable VDP interrupt
     im 1                            ; Interrupt Mode 1: executes a RST 38h on interrupts
-    ld sp, $dff0                    ; stack near top of RAM
+    ld sp, RAM_Base+RAM_Size-$10    ; stack near top of RAM
     jr BiosColdBoot
 
 .ORG $0008
@@ -160,7 +200,7 @@ WriteVRAMByte:                      ; rst $8 : write A at VRAM address in DE
 
 .ORG $0010                          ; rst $10 : write B tilemap values at VRAM address in DE,
 WriteTileMapEntries:                ; with source data at address HL
-    rst $20                         ; write VRAM address
+    rst $20                         ; first, write VRAM address
     xor a                           ;
     ld c, VDPDataPort               ; A = flags byte = 0 -> no flipping, bg priority, use palette #0
                                     ; and bit #9 pattern number = 0 (so only use bottom 256)
@@ -173,7 +213,7 @@ WriteTileMapEntry:
     ret
 
 TurnOnDisplay:
-    ld de, $81e0                    ; write $e0 in VDP reg.1 => turn on display, frame int. enable
+    LD_DE_VDP_REG_VAL $01, $e0      ; write $e0 in VDP reg.1 => turn on display, frame int. enable
 
 .ORG $0020
 WriteVDPControlPort:                ; rst $20
@@ -214,7 +254,7 @@ WriteVRAMNoExtraBlock2:
     ld b, c                         ; B = number of bytes left in this block
     ld c, VDPDataPort
 WriteVRAMLoop2:
-    outi                            ; (VDPDataPort) = (HL);  = B - 1; HL = HL + 1
+    outi                            ; (VDPDataPort) = (HL); B = B - 1; HL = HL + 1
     jr nz, WriteVRAMLoop2
     dec a                           ; finished a block, decrement blocks counter
     jr nz, WriteVRAMLoop2
@@ -222,12 +262,12 @@ WriteVRAMLoop2:
 
 UpdateSpriteAttrTable:
     ld hl, SpriteRAM
-    ld de, $7f00
-    ld bc, $64be
+    ld de, SpriteVRAM
+    ld bc, $6400 | VDPDataPort
     rst $20                         ; writes to data port go to VRAM, at $3f00 = sprite attribute table
     otir                            ; writes 100 bytes from SpriteRAM to VDP's $3f00
     ld hl, SpriteRAM + $80          ; (64 bytes of Y coords + 36 bytes in "empty zone" of SAT)
-    ld de, $7f80
+    ld de, SpriteVRAM + $80
     ld b, $80                       ; write to data port go to VRAM, at $3f80 =
     rst $20                         ; 2nd half of sprite attr. table (X + pattern #)
     otir                            ; writes 128 bytes from SpriteRAM + $80 to VDP's $3f80
@@ -238,16 +278,16 @@ NMI_Pause:
     retn                            ; disable pause button
 
 TurnOffDisplay:                     ; (UNUSED IN THIS BIOS)
-    ld de, $81a0                    ; write $a0 in VDP reg.1 => turn off display, frame int. enable
+    LD_DE_VDP_REG_VAL $01, $a0      ; write $a0 in VDP reg.1 => turn off display, frame int. enable
     jr WriteVDPControlPort
 
 BiosColdBoot:
     ld hl, PSG_ResetData            ; write 4 bytes from PSG_ResetData to port 7F (PSG)
-    ld c, $7f                       ; which set the four channels to "volume off"
+    ld c, PSGPort                   ; which set the four channels to "volume off"
     ld b, $04
     otir
     ld hl, VDP_ResetData            ; write 24 bytes from VDP_ResetData to port BF (VDP Control)
-    ld bc, $18bf                    ; which initializes VDP registers to their initial values,
+    ld bc, $1800 | VDPCtrlPort      ; which initializes VDP registers to their initial values,
     otir                            ; and writes to the VDP data port go to CRAM, 2nd/sprite palette
     xor a
     out (VDPDataPort), a            ; writes 0 to VDP data port => color 0 of sprite palette = black
@@ -260,7 +300,7 @@ BiosColdBoot:
     call WaitRoutine                ; wait 5.96 million cycles (near 1.7 s) for HW to warm up/init.
 BiosWarmBoot:
     ld hl, VDP_ResetData            ; reset VDP registers again (because ResetButtonHandler jumps here)
-    ld bc, $18bf
+    ld bc, $1800 | VDPCtrlPort
     otir
     xor a
     out (VDPDataPort), a            ; writes 0 to VDP data port => color 0 of sprite palette = black
@@ -269,48 +309,48 @@ BiosWarmBoot:
     ld a, $d0                       ; init first byte of sprite RAM (Y for sprite #0) to $d0,
     ld (SpriteRAM), a               ; so sprite #0 (and all remaining sprites) will not be drawn.
     ei                              ; enable interrupts
-    ld a, $03                       ; wait for interrupt handler to run, requesting it to call
+    ld a, UpdateGraphics | UpdateSAT; wait for interrupt handler to run, requesting it to call
     call WaitForIntHandlerDone      ; UpdateSpriteAttrTable and UpdateGraphicsData
     di                              ; disable interrupts
-    ld de, $4000                    ; note: here HL points to InterruptArg (from call above to WaitForIntHandlerDone) so L=0
+    LD_DE_PATTERN_ADDR $000         ; note: here HL points to InterruptArg (from call above to WaitForIntHandlerDone) so L=0
     ld bc, $0020
     rst $28                         ; write 0 in the first 32 bytes of VRAM, so pattern 0 is all 0s
     call ResetTileMap               ; resets tilemap with all zeros
-    ld de, $67e0
+    LD_DE_PATTERN_ADDR $13f
     ld bc, $0020                    ; write 0 in 32 bytes of VRAM at $27e0
     rst $28                         ; so pattern $13f (319) is all zeros
     ld hl, FontData                 ; load $228 = 552 lines of pattern data (69 patterns) with color 9 (white)
-    ld de, $4360                    ; from ROM address FontData, to VRAM address $360 (pattern 27 and following)
+    LD_DE_PATTERN_ADDR $01b         ; from ROM address FontData, to VRAM address $360 (pattern 27 and following)
     ld bc, $0228                    ; => upload (c)SEGA patterns, then font patterns for ASCII code 32 (space) to 95 (_)
     ld a, $09                       ; because we start at pattern 27, the patterns 32-95 match their ASCII code!
     call LoadMonochromePatternData  ; (e.g. the pattern for "A" is pattern 65, which is the ASCII code for "A")
     ld hl, RLEPatternDataEnjoy
-    ld de, $4c00                    ; load patterns 96-116, the "ENJOY!" pink string, and solid blue square
+    LD_DE_PATTERN_ADDR $060         ; load patterns 96-116, the "ENJOY!" pink string, and solid blue square
     call DecodeRLECompPatterns      ; stored in ROM in RLE compressed format
     xor a
     ld (SegaLogoScrollH), a         ; init. SegaLogoScrollH to 0
-    ld de, $7a16                    ; write a 4 rows, 10 columns block of tilemap entries
+    LD_DE_TILEMAP_XY $0b $08        ; write a 4 rows, 10 columns block of tilemap entries
     ld hl, SegaLogoTileMap          ; (X=11,Y=8)-(X=20,Y=11), area of the Sega logo
     ld bc, $040a                    ; with incrementing pattern numbers (118-153) (last row has repeats of pattern #148
     call UpdateTileMapBlock         ;  for X=11,14,17,18,19, this is the horizontal white line at the bottom of each letter)
     ld a, $81
     ld (SongRequest), a             ; trigger playback of SegaMasterSystemSong
-    ld de, $4ec0
+    LD_DE_PATTERN_ADDR $076
     ld hl, RLEPatternDataSEGA       ; load patterns 118-207 (118-153: Sega logo, 154-207: "MASTER SYSTEM")
     call DecodeRLECompPatterns
     ld hl, RLEPatternDataSnailMaze
-    ld de, $4060                    ; load patterns 3-20 (snail maze game)
+    LD_DE_PATTERN_ADDR $003         ; load patterns 3-20 (snail maze game)
     call DecodeRLECompPatterns
     call InitSpritesAndScrolling    ; init grid of black sprites and horizontal scrolling
     call TurnOnDisplay
     call ShowBumperScreen
-    di
+    di                              ; disable VDP interrupt
     ld hl, DetectCode
     ld de, DetectCodeRAM
     ld bc, DetectEnd - DetectCode   ; copy the cart etc., detection routine in RAM at C700
     ldir
     call DetectCodeRAM              ; run detection code for RAM
-    di                              ; disable VDP interrupt
+    di                              ; disable VDP interrupt (unnecessary, instruction removed in BIOS 2.0)
     ld a, (ROM_HardwareSlot)
     or a                            ; if we couldn't find any "TMR SEGA" string at any location for
     jr z, NoRomFound                ; any configuration, go show the instruction screen, else:
@@ -338,10 +378,10 @@ NoRomFoundInfLoop:
     jr NoRomFoundInfLoop
 
 ShowSegaCopyrightString:
-    ld de, $7d54
+    LD_DE_TILEMAP_XY $0a, $15
     ld b, $0b
     ld hl, SegaCopyrightTileMap
-    rst $10                         ; write 11 entries at VRAM address 3d54 (X=10, Y=21)
+    rst $10                         ; write 11 entries starting at tile coords X=10, Y=21
     ret
 
 SegaCopyrightTileMap:
@@ -366,35 +406,35 @@ PrintStrings:                       ; number of strings to print in B, text data
     ret
 
 SoftwareErrorTileMap:
-.dw $7884    ; write at tile coords (X=2, Y=2) ($1b = (c) tile, $1d-$1f = SEGA tiles in the special font)
+ TILEMAP_XY $02, $02                ; write at tile coords (X=2, Y=2) ($1b = (c) tile, $1d-$1f = SEGA tiles in the special font)
 .db $19, "MASTER SYSTEM ", $1b, " ", $1c, $1d, $1e, $1f, " 1986"
-.dw $7904    ; write at tile coords (X=2, Y=4)
+ TILEMAP_XY $02, $04
 .db $0e, "SOFTWARE ERROR"
 
 InstrScreenTileMap:
-.dw $7834    ; write at tile coords (X=26, Y=0) (this version string shared with Software Error screen)
+ TILEMAP_XY $1a, $00                ; write at tile coords (X=26, Y=0) (this version string shared with Software Error screen)
 .db $04, "V1.3"
-.dw $7884    ; write at tile coords (X=2, Y=2)
+ TILEMAP_XY $02, $02
 .db $13, "WELCOME TO THE SEGA"
-.dw $7904    ; write at tile coords (X=2, Y=4)
+ TILEMAP_XY $02, $04
 .db $0e, "MASTER SYSTEM."
-.dw $79c4    ; write at tile coords (X=2, Y=7)
+ TILEMAP_XY $02, $07
 .db $19, "TO PLAY,JUST FOLLOW THESE"
-.dw $7a44    ; write at tile coords (X=2, Y=9)
+ TILEMAP_XY $02, $09
 .db $0d, "INSTRUCTIONS:"
-.dw $7b04    ; write at tile coords (X=2, Y=12)
+ TILEMAP_XY $02, $0c
 .db $19, "1.TURN OFF POWER ON POWER"
-.dw $7b88    ; write at tile coords (X=4, Y=14)
+ TILEMAP_XY $04, $0e
 .db $05, "BASE."
-.dw $7c04    ; write at tile coords (X=2, Y=16)
+ TILEMAP_XY $02, $10
 .db $1c, "2.INSERT CARD/CARTRIDGE INTO"
-.dw $7c88    ; write at tile coords (X=4, Y=18)
+ TILEMAP_XY $04, $12
 .db $07, "SYSTEM."
-.dw $7d04    ; write at tile coords (X=2, Y=20)
+ TILEMAP_XY $02, $14
 .db $1c, "3.TURN POWER BACK ON,AND...."
-.dw $7d92    ; write at tile coords (X=9, Y=22) top part of "ENJOY!!!" logo
+ TILEMAP_XY $09, $16                ; write top part of "ENJOY!!!" logo
 .db $0d, $60, $61, $62, $63, $64, $65, $66, $67, $68, $69, $63, $63, $63
-.dw $7dd2    ; write at tile coords (X=9, Y=23) bottom part of "ENJOY!!!" logo
+ TILEMAP_XY $09, $17                ; write bottom part of "ENJOY!!!" logo
 .db $0d, $6a, $6b, $6c, $6d, $6e, $6f, $70, $71, $72, $00, $73, $73, $73
 
 .ORG $0289
@@ -538,7 +578,7 @@ ChecksumPages:       ; how many pages to check for non-first 32KB checksumming
 .db $02              ; ROM size 64KB  ($e) : (64KB  - 32KB) / 16KB = 2 pages left to checksum
 .db $06              ; ROM size 128KB ($f) : (128KB - 32KB) / 16KB = 6 pages left to checksum
 .db $0e              ; ROM size 256KB ($0) : (256KB - 32KB) / 16KB = 14 pages left to checksum
-.db $1e              ; ROM size 256KB ($1) : (512KB - 32KB) / 16KB = 30 pages left to checksum
+.db $1e              ; ROM size 512KB ($1) : (512KB - 32KB) / 16KB = 30 pages left to checksum
                      ; ROM size 1MB ($2) will grab the first byte of the next opcode which is $3e = 62,
                      ; which is what is wanted ((1024KB - 32KB) / 16KB = 62) This is insane optimisation!
 
@@ -560,8 +600,8 @@ WaitLoop:
     djnz WaitRoutine
     ret
 
-MysteriousUnusedData:               ; UNUSED IN THIS BIOS
-.db $0e, $0d, $0c, $0a, $08, $06
+WaitRoutineTable:                           ; a table of values of B to pass to WaitRoutine, used in BIOS 1.0
+.db $0e, $0d, $0c, $0a, $08, $06            ; unused in this BIOS, and removed in BIOS 2.0
 
 ResetButtonHandler:
     di                              ; disable interrupts
@@ -572,14 +612,14 @@ ResetButtonHandler:
     ld (hl), $00
     ldir                            ; zero out entire RAM
     ld hl, PSG_ResetData            ; write 4 bytes from PSG_ResetData to port 7F (PSG)
-    ld c, $7f                       ; which set the four channels to "volume off"
+    ld c, PSGPort                   ; which set the four channels to "volume off"
     ld b, $04
     otir
     jp BiosWarmBoot                 ; and jump to rest of BIOS boot routine
 
 InitPaletteData:
 .db $20                                     ; 32 bytes to write
-.db $00, $c0                                ; writes to the data port go to CRAM
+.dw VDP_WriteCRAM                           ; writes to the data port go to CRAM
 .db $00, $3f, $3e, $3f, $30, $30, $38, $3f  ; black, white, pale turquoise, white, blue, blue, sky blue, white
 .db $37, $3f, $00, $00, $00, $00, $00, $00  ; pink, white, blacks
 .db $00, $03, $30, $0f, $07, $16, $3f, $02  ; black, red, blue, yellow, orange, brown, white, dark red
@@ -651,9 +691,9 @@ SkipResetCheck:
 NotVBlank:                          ; so this is a line interrupt
     push de
     ld de, (MazeScrollH)
-    ld d, $88                       ; we are scrolling in a Snail Game maze, so
+    LD_D_VDP_REG_NUM $08            ; we are scrolling in a Snail Game maze, so
     rst $20                         ; update X scroll VDP register with the value in MazeScrollH
-    ld de, $8aff
+    LD_DE_VDP_REG_VAL $0a, $ff
     rst $20                         ; and set Line Counter to 255 (to prevent unwanted HBlank interrupts)
     pop de
     pop af
@@ -707,7 +747,7 @@ ReadTileMapEntry:
     ret
 
 ; Writes a rectangular block of tilemap entries.
-; Height in B, width in C, start address in VRAM (+4000) in DE, and source data in HL
+; Height in B, width in C, (start address in VRAM | VDP_WriteVRAM) in DE, and source data in HL
 ; source data is one byte per tilemap entry (the pattern number byte, the other one is always set to 0)
 ; source data layout is width bytes for the first "row", width bytes for the second "row" etc.
 UpdateTileMapBlock:
@@ -722,20 +762,21 @@ UpdateTileMapRow:
     add hl, bc                      ; advance DE by 64 bytes = 32 tilemap entries
     ex de, hl                       ; so that DE points to the start of the next row in the block
     pop bc
-    dec c                           ; decrement c = row counter
+    dec c                           ; decrement C = row counter
     jr nz, UpdateTileMapRow         ; and keep going until we have written all rows
     ret
 
+; 1BPP Tile Loader (also used in Alex Kidd in Miracle World...)
 ; Load pattern lines that are all entirely of the same color.
 ; BC = number of consecutive pattern lines, A = color, HL = start source address in ROM
-; DE = start dest. address in VRAM (to write at $360, de = $4360)
+; DE = start dest. address in VRAM | VDP_WriteVRAM
 ; Because all of the pixels of a given line have the same color, we need only one byte (instead of 4)
 ; to describe the 4 bitplanes, achieving a compression ratio of 4x
 ; e.g: A = color = 9 (1001b) and byte = $3C, the color is a bitplane mask, and we write:
 ; $3C (bitplane 0), $00 (bitplane 1), $00 (bitplane 2), $3C (bitplane 3)
 LoadMonochromePatternData:
     ld (TempVar), a                 ; temp. save color
-    rst $20                         ; set VRAM start address from de
+    rst $20                         ; set VRAM start address from DE
 CompressedLineDataLoop:
     ld a, (hl)                      ; fetch a line
     exx                             ; save BC, DE, HL
@@ -759,25 +800,26 @@ WriteBitplaneLine:
     ret
 
 VDP_ResetData:
-.db $36, $80            ; reg.0 (Mode Control 1) : don't disable scrolling for cols 24-31 and rows 0-1, mask col 0
+ VDP_REG_VAL $00, $36   ; reg.0 (Mode Control 1) : don't disable scrolling for cols 24-31 and rows 0-1, mask col 0
                         ; with overscan color from reg. 7, enable line interrupt, don't shift sprites left by 8
                         ; use Mode 4, normal display
-.db $a0, $81            ; reg.1 (Mode Control 2) : display blanked, enable frame interrupt, sprites are 8x8
-.db $ff, $82            ; reg.2 (Name Table Base Address) : tilemap at $3800 (highest 2KB of the 16KB VRAM)
-.db $ff, $83            ; reg.3 (Color Table Base Address) : needs to be set to FF or pattern and tilemap data
+ VDP_REG_VAL $01, $a0   ; reg.1 (Mode Control 2) : display blanked, enable frame interrupt, sprites are 8x8
+ VDP_REG_VAL $02, $ff   ; reg.2 (Name Table Base Address) : tilemap at $3800 (highest 2KB of the 16KB VRAM)
+ VDP_REG_VAL $03, $ff   ; reg.3 (Color Table Base Address) : needs to be set to FF or pattern and tilemap data
                         ; will be fetched incorrectly
-.db $ff, $84            ; reg.4 (Background Pattern Generator Base Address) : bits 2-0 must be set or pattern data
+ VDP_REG_VAL $04, $ff   ; reg.4 (Background Pattern Generator Base Address) : bits 2-0 must be set or pattern data
                         ; and tilemap data will be fetched incorrectly
-.db $ff, $85            ; reg.5 (Sprite Attr. Table Base Address) : $3f00 (unused top 256 bytes of tilemap memory)
-.db $fb, $86            ; reg.6 (Sprite Pattern Generator Base Address) : sprite patterns in first 8 KB of VRAM
-.db $00, $88            ; reg.8 (Background X Scroll) : no scrolling
-.db $00, $89            ; reg.9 (Background Y Scroll) : no scrolling
-.db $ff, $8a            ; reg.A (Line Counter) turn off HBLANK interrupt requests
-.db $00, $87            ; reg.7  (Overscan/Backdrop Color) : color 0 (from sprite palette)
-.db $10, $c0            ; Writes to the data port goes to CRAM starting at byte 16 (start of 2nd/sprite palette)
+ VDP_REG_VAL $05, $ff   ; reg.5 (Sprite Attr. Table Base Address) : $3f00 (unused top 256 bytes of tilemap memory)
+ VDP_REG_VAL $06, $fb   ; reg.6 (Sprite Pattern Generator Base Address) : sprite patterns in first 8 KB of VRAM
+ VDP_REG_VAL $08, $00   ; reg.8 (Background X Scroll) : no scrolling
+ VDP_REG_VAL $09, $00   ; reg.9 (Background Y Scroll) : no scrolling
+ VDP_REG_VAL $0a, $ff   ; reg.A (Line Counter) turn off HBLANK interrupt requests
+ VDP_REG_VAL $07, $00   ; reg.7  (Overscan/Backdrop Color) : color 0 (from sprite palette)
+.dw VDP_WriteCRAM + $10 ; Writes to the data port goes to CRAM starting at byte 16 (start of 2nd/sprite palette)
 
+; Phantasy Star Tile Decoder
 ; Decode and write to VRAM a list of consecutive pattern lines stored in RLE compressed format.
-; HL = address of compressed data, DE = where to write in VRAM (DE=$4c00 -> write to $c00 = pattern #96)
+; HL = address of compressed data, DE = where to write in VRAM | VDP_WriteVRAM 
 ; The compressed format is the "Phantasy Star tile" format: 
 ; 4 compressed byte streams in sequence, one per bitplane.
 ; for each byte stream: read the "counter" byte (let's call its value n)
@@ -830,26 +872,26 @@ RepeatMode:
 
 ResetScrollRegisters:               ; (UNUSED IN THIS BIOS)
     xor a
-    ld (ResetScrollX_Val), a        ; zeroes these two variables
-    ld (ResetScrollY_Val), a
+    ld (ResetScrollY_Val), a        ; zeroes these two variables
+    ld (ResetScrollX_Val), a
     di
     ld hl, ResetScrollRegFlag
     ld a, (hl)                      ; if ResetScrollRegFlag = 0, return
     or a
     ret z
     ld (hl), $00                    ; else set the ResetScrollRegFlag to 0
-    ld a, (ResetScrollX_Val)
-    ld e, a
-    ld d, $89
-    rst $20                         ; write 0 to VDP register #9 (Y scroll)
     ld a, (ResetScrollY_Val)
+    ld e, a
+    LD_D_VDP_REG_NUM $09
+    rst $20                         ; write 0 to VDP register #9 (Y scroll)
+    ld a, (ResetScrollX_Val)
     ld e, a
     dec d
     rst $20                         ; write 0 to VDP register #8 (X scroll)
     ret
 
 ResetTileMap:
-    ld de, $7800                    ; write in VRAM at address $3800 (tilemap)
+    ld de, TileMapVRAM              ; write in VRAM at address $3800 (tilemap)
     ld bc, $0700                    ; $700 bytes (= length of tilemap: 32 x 28 x 2 bytes)
     ld l, $00                       ; the value 0
     rst $28
@@ -868,14 +910,14 @@ CheckController1:
     ret
 
 ShowBumperScreen:
-    ld a, $05
+    ld a, UpdateLogoScroll | UpdateSAT
     call WaitForIntHandlerDone      ; Int handler will call UpdateSpriteAttrTable and UpdateSegaLogoScrolling
     ld a, (VoiceSyncFlag)           ; wait for sound sync flag, initially 0, set to $80 by soundRoutine7
     or a                            ; called from voice 1 right after the rest after the starting tone ramp
     jr z, ShowBumperScreen
-    ld de, $7b8a                    ; Make the "MASTER SYSTEM" logo appear
+    LD_DE_TILEMAP_XY $05, $0e       ; Make the "MASTER SYSTEM" logo appear
     ld hl, MasterSystemTileMap      ; by writing a 3 high, 23 wide rectangular block of tilemap entries
-    ld bc, $0317                    ; at VRAM address $3b8a  (X=5,Y=14)-(X=27,Y=16)
+    ld bc, $0317                    ; at tile coordinates (X=5,Y=14)-(X=27,Y=16)
     di
     call UpdateTileMapBlock
     call ShowSegaCopyrightString
@@ -892,10 +934,10 @@ InitSpritesAndScrolling:
     ld a, $f0                       ; and actually starting to scroll the Sega logo
     ld (SegaLogoScrollH), a         ; Initial H scroll value: $f0
     ld e, a
-    ld d, $88                       ; write $88f0 to VDP control port => register 8 (horizontal scrolling) = $f0
-    rst $20                         ; (first column drawn is #1 fom the tilemap?)
+    LD_D_VDP_REG_NUM $08            ; VDP register 8 (horizontal scrolling) = $f0
+    rst $20
     ld l, $ff
-    ld de, $5fc0                    ; write $ff at VRAM addresses $1fc0-$1fff (patterns #254 & #255)
+    LD_DE_PATTERN_ADDR $fe          ; write $ff at VRAM addresses $1fc0-$1fff (patterns #254 & #255)
     ld bc, $0040                    ; (makes them black with current palettes)
     rst $28
     ld de, SpriteRAM
@@ -922,7 +964,7 @@ InitSpriteXandPattern:
     jr InitSpriteXandPattern
 InitSpriteGroupDone:
     djnz InitSpriteGroupXandPattern
-    ld a, 1
+    ld a, UpdateSAT
     jp WaitForIntHandlerDone        ; A = 1 => Int handler will call UpdateSpriteAttrTable
 
 InitSpritesYData:
@@ -961,7 +1003,7 @@ UpdateSegaLogoScrolling:
     ret                             ; (which will disable the optional update calls in the interrupt)
 UpdateScrollAndSprites:
     ld e, a
-    ld d, $88
+    LD_D_VDP_REG_NUM $08
     rst $20                         ; write value of SegaLogoScrollH in VDP HScroll register
     inc (hl)                        ; then increment it
     ld a, (hl)
@@ -969,10 +1011,10 @@ UpdateScrollAndSprites:
     bit 7, a                        ; A goes $0f, $0e... so a counter of many scrolling updates left to do
     ret nz                          ; when A goes from $00 to $ff, we are done with the scrolling!
     cp $08
-    ld de, $5fe0                    ; if A >= 8, we are going to update tile data for sprite $ff
+    LD_DE_PATTERN_ADDR $ff          ; if A >= 8, we are going to update tile data for sprite $ff
     jr c, UpdateMaskingSpriteTile
     sub $08
-    ld de, $5fc0                    ; else update tile date for sprite $fe
+    LD_DE_PATTERN_ADDR $fe          ; else update tile date for sprite $fe
 UpdateMaskingSpriteTile: 
     ld hl, MaskingSpriteTiles       ; we are going to "shrink" the $ff sprite, then the $fe sprite, one column at a time:
     ld b, $00                       ; first update we will write $7f in all of the tile's bytes, so the leftmost column
@@ -989,7 +1031,7 @@ MaskingSpriteTiles:
 ;---------------------------------------------------------------------------------------------------------
 ; SOUND CODE AND DATA START HERE
 ;
-; This looks like a variation of SMPS
+; This looks like a predecessor to sound engines used in Choplifter, Pro Wrestling, Alex Kidd in M. World
 ; Song format is as follows:
 ; first byte is the number of voices (always 4 in this BIOS)
 ; then 9 bytes per voice:
@@ -1514,8 +1556,8 @@ SoundRoutineE1:                     ; end of voice
     ld (ix + Voice.flags), a        ; disable voice update
     call SilenceChannel             ; and silence corresponding PSG channel
     pop hl
-    pop hl
-    ret
+    pop hl                          ; skip 2 levels of callstack so instead of returning to SoundRoutineRetsHere,
+    ret                             ; we return to the ld de, $20 instruction in UpdateSoundLoop
 
 SilenceChannel:
     ld a, (ix + Voice.PSGChannel)
@@ -1543,7 +1585,7 @@ ClearSound:
     exx
     exx
     ld hl, PSG_ResetData            ; turn off all sound channels
-    ld c, $7f
+    ld c, PSGPort
     ld b, $04
     otir
     xor a
@@ -1631,19 +1673,19 @@ ToneTable:
 .dw $0012                ; ~G8
 .dw $0011                ; ~G#8
 
-MultiplyHbyE:                       ; Multiply h by e, result in hl
+MultiplyHbyE:                       ; Multiply H by E, result in HL
     ld d, $00
-    ld l, d                         ; d = l = 0
+    ld l, d                         ; D = L = 0
     ld b, 8
 ProcessOneBitOfH:
-    add hl, hl                      ; shift h (and partial result) one bit left
+    add hl, hl                      ; shift H (and partial result) one bit left
     jr nc, DontAddE
-    add hl, de                      ; if bit of h was set, add e to the result
+    add hl, de                      ; if bit of H was set, add e to the result
 DontAddE:
     djnz ProcessOneBitOfH
     ret
 
-DivideHLbyE:                        ; Unsigned integer division. Divide hl by e, quotient in a, remainder in h
+DivideHLbyE:                        ; Unsigned integer division. Divide HL by E, quotient in A, remainder in H
     ld b, 8
 DividendLoop:
     adc hl, hl                      ; Shift HL, and bring Carry from previous iteration in bit0 of l
@@ -1652,7 +1694,7 @@ DividendLoop:
     cp e                            ; If Carry was not set, we have to compare with E
     jr c, LesserThanE               ; if smaller than E, end this iteration with Carry set
 GreaterThanE:
-    sub e                           ; else subtract e, and update hl for next iteration
+    sub e                           ; else subtract E, and update HL for next iteration
     ld h, a
     or a                            ; set Carry to 0, this iteration the divisor was <= the 9 left bits of HL
 LesserThanE:
@@ -1803,9 +1845,10 @@ SongTable:
 .dw SnailMazeLoopSong                   ; Snail Maze Game Song (loop)
 .dw SnailMazeEndRoundSong               ; Snail Maze Game Round Victory
 
-;-------------------------------------
+;-----------------------------------------------------------------------
 ; SNAIL MAZE GAME'S CODE STARTS HERE
-;-------------------------------------
+; (Note: Sprite & Entity code  also used in Alex Kidd in Miracle World)
+;-----------------------------------------------------------------------
 .ORG $0B90
 SnailMazeGame:
     ld a, $ff
@@ -1823,16 +1866,16 @@ InitTopBorderLoop:
     djnz InitTopBorderLoop
     di
     ld hl, RoundTimeString
-    ld de, $7964
+    LD_DE_TILEMAP_XY $12, $05
     ld b, $0a                       ; write the "RD    TIME" string at the top right of the screen
     rst $10                         ; (write 10 tilemap entries starting at tile coords (X=18, Y=5))
 StartNewRound:
     di
     ld hl, RoundNumberDCB
-    ld de, $796a
+    LD_DE_TILEMAP_XY $15, $05
     call PrintYellowNumber          ; display round number (DCB) at tile coords (X=21, Y=5)
     ei
-    ld a, $10
+    ld a, UpdateMazeTime
     call WaitForIntHandlerDone      ; Int handler will call UpdateSnailMazeGameTime
     ld ix, Snail
     call ResetEntityStruct          ; rest snail's entity struct
@@ -1851,12 +1894,12 @@ StartNewRound:
     inc a
     ld (StartPoint.entityId), a     ; assigns entity id = 3 to start point
     call UpdateEntities             ; do a first update of entities to finish their initialization
-    ld bc, $1401
+    ld bc, $1400 | UpdateSAT
     call Wait_B_Vblanks             ; wait 20 VBlanks (which will run UpdateSpriteAttrTable)
     ld a, $83
     ld (SongRequest), a             ; triggers playback of SnailMazeLoopSong
 SnailMazeGameLoop:
-    ld a, $11
+    ld a, UpdateMazeTime | UpdateSAT
     call WaitForIntHandlerDone      ; wait 1 VBlank (UpdateSpriteAttrTable and UpdateSnailMazeGameTime)
     call UpdateEntities
     ld hl, GoalReachedFlag          ; goal reached flag (set to Y snail = Y goal when goal reached)
@@ -1868,8 +1911,8 @@ SnailMazeGameLoop:
     or a
     jr z, SnailMazeGameLoop         ; if we haven't yet run out of time, loop
     di                              ; oops we are out of time
-    ld hl, $0d97
-    ld de, $79da                    ; at tile coords (X=13, Y=7)
+    ld hl, TimeUpString
+    LD_DE_TILEMAP_XY $0d, $07       ; at tile coords (X=13, Y=7)
     ld b, $07                       ; write tilemap entries for "TIME UP" string
     rst $10
     ei
@@ -1900,11 +1943,11 @@ WonRound:
     ld (hl), $00                    ; first reset goal reached flag to 0
     ld a, $84
     ld (SongRequest), a             ; trigger playback of SnailMazeEndRoundSong
-    ld bc, $6001
+    ld bc, $6000 | UpdateSAT
     call Wait_B_Vblanks             ; wait 96 VBlanks (which run UpdateSpriteAttrTable)
     ld a, $d0
     ld (SpriteRAM), a               ; stop displaying sprites (writes $d0 as Y of sprite #0)
-    ld bc, $3001                    ; wait 48 VBlanks (which run UpdateSpriteAttrTable)
+    ld bc, $3000 | UpdateSAT        ; wait 48 VBlanks (which run UpdateSpriteAttrTable)
     call Wait_B_Vblanks
     ld hl, RoundNumberDCB
     ld a, (hl)
@@ -2009,24 +2052,24 @@ OverwiteLastMazeColumn:
     djnz OverwiteLastMazeColumn     ; (this is the column of solid blue you see on the right)
     ld a, $ff
     ld (ScrollMazeFlag), a          ; set flag to mark the beginning of scrolling the maze
-    ld de, $8036                    ; write $36 to VDP register 0, same value that is written
+    LD_DE_VDP_REG_VAL $00, $36      ; write $36 to VDP register 0, same value that is written
     rst $20                         ; during BIOS init (cf. VDP_ResetData)
 WaitForMazeScrollingDone:
-    ld a, $08
+    ld a, UpdateMazeCol
     call WaitForIntHandlerDone      ; Int handler will call UpdateWriteMazeColumn
     ld a, (ScrollMazeFlag)
     or a
     jr nz, WaitForMazeScrollingDone ; loop until scrolling done
-    ld de, $8006                    ; write $06 to VDP register 0 => don't mask column 0,
+    LD_DE_VDP_REG_VAL $00, $06      ; write $06 to VDP register 0 => don't mask column 0,
     rst $20                         ; and disable line interrupts
-    ld de, $8aff
+    LD_DE_VDP_REG_VAL $0a, $ff
     rst $20                         ; write $ff to VDP register $A (Line Counter)
     ret
 
 UpdateWriteMazeColumn:
-    ld de, $8800
+    LD_DE_VDP_REG_VAL $08, $00
     rst $20                         ; write 0 in VDP register 8 (Background X Scroll) : no scrolling
-    ld de, $8a37                    ; write $37 in VDP register $A (Line Counter = $37 = 55)
+    LD_DE_VDP_REG_VAL $0a, $37      ; write $37 in VDP register $A (Line Counter = $37 = 55)
     rst $20                         ; which is the line where we start the scrolling of the maze
     ld hl, MazeScrollH
     ld a, (hl)                      ; read current X scroll RAM value
@@ -2049,7 +2092,7 @@ WriteMazeColumnToVDP:
     ld l, a
     ld h, >MazeTopTilemap           ; HL = $c9c0 + A/4 = RAM tilemap entry (X=A/8, Y=-1)
     ld b, $11                       ; we are going to write 17 tile entries
-WriteMazeColumnLoop:                    ; the top border ones: tile #0 at the corners, else #3 (top wall)
+WriteMazeColumnLoop:                ; the top border ones: tile #0 at the corners, else #3 (top wall)
     push bc                         ; and 16 for maze column A/8
     ld a, (hl)
     rst $08                         ; write VDP tilemap entry (1st byte) from the one in RAM
@@ -2072,7 +2115,7 @@ UpdateSnailMazeGameTime:
     sub $01
     daa                             ; subtract one second, and save (after reconverting to DCB)
     ld (hl), a
-    ld de, $797a                    ; we are going to display time at (X=29, Y=5)
+    LD_DE_TILEMAP_XY $1d, $05       ; we are going to display time at (X=29, Y=5)
     jr nz, PrintYellowNumber        ; if time is now greater or equal to zero, display it
     dec a
     ld (OutOfTimeFlag), a           ; else first set OutOfTimeFlag to $ff to track we ran out of time!
