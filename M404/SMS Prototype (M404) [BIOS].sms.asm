@@ -486,7 +486,6 @@ CopySpriteTableToVRAM:
 	ld bc, $0080
 	jp CopyBCBytesFromHLToVRAMAtDE ; and ret
 
-; Data from 2AE to 2CD (32 bytes)
 VDPRegistersData:
 .db $26 $80 
 .db $A0 $81 
@@ -784,12 +783,11 @@ PointVRAMToSegaLogoArea:
 	pop de
 	ret
 
-; Data from 464 to 47B (24 bytes)
-SegaLogoTilemap:
-.db $00 $03 $06 $09 $0C $0F $12 $15 $01 $04 $07 $0A $0D $10 $13 $16
+SegaLogoTilemap: ; Low bytes only
+.db $00 $03 $06 $09 $0C $0F $12 $15 
+.db $01 $04 $07 $0A $0D $10 $13 $16
 .db $02 $05 $08 $0B $0E $11 $14 $17
 
-; Data from 47C to 54A (207 bytes)
 SegaLogoTiles1bpp:
 .incbin "Sega logo.1bpp"
 
@@ -797,21 +795,14 @@ SegaLogoPaletteGradientData:
 .db $3F $3E $3C $38 $34 $30 $20 $30 $34 $38 $3C $3E 
 .db $3F $3E $3C $38 $34 $30 $20 $30 $34 $38 $3C $3E
 
-; Data from 554 to 853 (768 bytes)
 SegaLogoTiles4bpp:
 .incbin "Sega logo.bin"
 
-; Data from 854 to 8B7 (100 bytes)
-MasterSystemTilemap: ; Sprite prority is not enabled 
-.db $60 $09 $61 $09 $62 $09 $62 $0B $63 $09 $64 $09 $65 $09 $66 $09
-.db $67 $09 $68 $09 $67 $09 $69 $09 $00 $00 $63 $09 $64 $09 $6A $09
-.db $6A $0B $63 $09 $64 $09 $65 $09 $66 $09 $67 $09 $68 $09 $60 $09
-.db $61 $09 $6B $09 $6C $09 $6D $09 $6D $0B $64 $0F $63 $0F $6E $09
-.db $6F $09 $67 $0D $68 $0D $70 $09 $71 $09 $00 $00 $64 $0F $63 $0F
-.db $6E $09 $6E $0B $64 $0F $63 $0F $6E $09 $6F $09 $67 $0D $68 $0D
-.db $6B $09 $6C $09
+MasterSystemTilemap: ; Foreground bit is not set 
+;   M           A           S           T           E           R           space S           Y           S           T           E           M
+.dw $0960 $0961 $0962 $0B62 $0963 $0964 $0965 $0966 $0967 $0968 $0967 $0969 $0000 $0963 $0964 $096A $0B6A $0963 $0964 $0965 $0966 $0967 $0968 $0960 $0961
+.dw $096B $096C $096D $0B6D $0F64 $0F63 $096E $096F $0D67 $0D68 $0970 $0971 $0000 $0F64 $0F63 $096E $0B6E $0F64 $0F63 $096E $096F $0D67 $0D68 $096B $096C
 
-; Data from 8B8 to 947 (144 bytes)
 MasterSystemTiles:
 .incbin "mastersystem.1bpp"
 
