@@ -1,14 +1,13 @@
+; 8KB ROM size, <3.1KB actually used
 .memorymap
-slotsize $4000
+slotsize $2000
 slot 0 $0000
-slot 1 $4000
-slot 2 $8000
-defaultslot 2
+defaultslot 0
 .endme
 
 .rombankmap
 bankstotal 1
-banksize $4000
+banksize $2000
 banks 1
 .endro
 
@@ -17,25 +16,24 @@ RAM_Start dsb $80
 .ende
 
 .enum $C080 export
-PaletteIndexFor1bppTiles db ; Used internally to LoadTiles1bpp, holds the palette index to extend the 1bpp to
-TilemapRectHighByte db ; When drawing 8-bit tilemap data, this determines the high byte used.
-PaletteRotationTotalCounter db
-PaletteRotationFrameCounter db ; Cycles 0-4 to slow the rotation
-PaletteRotationPosition db ; Cycles 0-10 to select the palette rotation position
+RAM_PaletteIndexFor1bppTiles db ; Used internally to LoadTiles1bpp, holds the palette index to extend the 1bpp to
+RAM_TilemapRectHighByte db ; When drawing 8-bit tilemap data, this determines the high byte used.
+RAM_PaletteRotationTotalCounter db
+RAM_PaletteRotationFrameCounter db ; Cycles 0-4 to slow the rotation
+RAM_PaletteRotationPosition db ; Cycles 0-10 to select the palette rotation position
 .ende
 
 .enum $C090 export
 RAM_ScrollUpdateNeeded db ; Set when the VBlank handler should emit data to the scroll registers
-LogoScrollingControl db ; Low bit enables the MASTER SYSTEM logo scrolling, high bit enables the SEGA/MASTER SYSTEM logos scrolling apart
-YScrollDeltaCounter db ; Counter for how far the SEGA/MASTER SYSTEM logos scroll apart
+RAM_LogoScrollingControl db ; Low bit enables the MASTER SYSTEM logo scrolling, high bit enables the SEGA/MASTER SYSTEM logos scrolling apart
+RAM_YScrollDeltaCounter db ; Counter for how far the SEGA/MASTER SYSTEM logos scroll apart
 .ende
 
 .enum $C096 export
 RAM_XScroll db
 .ende
 
-.enum $C099 export
-_RAM_C099_ db ; Unused?
+.enum $C09A export
 RAM_YScroll db
 .ende
 
@@ -52,12 +50,13 @@ RAM_SlotCheckCode dsb $66
 .enum $C700 export
 RAM_SpriteTable .db
 RAM_SpriteTableYs dsb 64
+_unused dsb 64
 RAM_SpriteTableXNs dsb 64*2
 .ende
 
 .enum $D000 export
-SegaLogoRightWayUpWithGap dsb 3*8*8*3
-SegaLogoUpsideDownWithPadding dsb 3*8*8*3
+RAM_SegaLogoRightWayUpWithGap dsb 3*8*8*3
+RAM_SegaLogoUpsideDownWithPadding dsb 3*8*8*3
 .ende
 
 .enum $D480 export
@@ -79,7 +78,7 @@ RAM_YScrollForSegaLogo dw ; High byte is the real scroll value, 16-bit value is 
 ; VDP constants
 .define SizeOfTile 32
 .define SizeOfNameTableRow 64
-.define SizeOfNameTable SizeOfNameTableRow*24
+.define SizeOfNameTable SizeOfNameTableRow*28
 .define NameTableAddress $3800
 .define SpriteTableAddress $3f00
 
@@ -148,7 +147,7 @@ Boot:
 
 	call MoveWavingSegaLogoToMiddleOfScreen
 
-	ld hl, LogoScrollingControl
+	ld hl, RAM_LogoScrollingControl
 	ld (hl), $01
 	call WaitForValueAtHLToBeZero ; Waits for MASTER SYSTEM to scroll onto screen
 
@@ -184,10 +183,10 @@ PrepareForCopyright:
 	ld hl, +
 	ld (RAM_PaletteLoadDataAddress), hl
 	
-	; Scroll up by 16? and wait for it to be done
-	ld a, $10
-	ld (YScrollDeltaCounter), a
-	ld hl, LogoScrollingControl
+	; Scroll up by 16 and wait for it to be done
+	ld a, 16
+	ld (RAM_YScrollDeltaCounter), a
+	ld hl, RAM_LogoScrollingControl
 	ld (hl), $80
 	jp WaitForValueAtHLToBeZero ; and ret
 
@@ -275,7 +274,7 @@ _CheckForText2:
 _BootIfMatchesAt7FE0:
 	ld de, $7FE0 ; Checked address
 _BootIfMatches:
---:	ld a, (de)
+-:	ld a, (de)
 	cp (hl)
 	ret nz ; nop out here to always boot 
 	inc hl
@@ -396,35 +395,30 @@ FillVRAMWithL:
 	or a
 	jr z, +
 	inc b
-+:
-	ld a, l
--:
-	out (Port_VDPData), a
++:	ld a, l
+-:	out (Port_VDPData), a
 	dec c
 	jr nz, -
 	djnz -
 	ret
 
---:
-	push bc
-	call SetVRAMAddressToDE
-	ld b, c
-	ld c, Port_VDPData
--:
-	outi
-	nop
-	jr nz, -
-_LABEL_249_:
-	ex de, hl
-	ld bc, $0040
-	add hl, bc
-	ex de, hl
+--:	push bc
+		call SetVRAMAddressToDE
+		ld b, c
+		ld c, Port_VDPData
+-:		outi
+		nop
+		jr nz, -
+		ex de, hl
+		ld bc, SizeOfNameTableRow
+		add hl, bc
+		ex de, hl
 	pop bc
-	djnz -21
+	djnz --
 	ret
 
 DrawTilemapRectWithHighByteA:
-	ld (TilemapRectHighByte), a
+	ld (RAM_TilemapRectHighByte), a
 	; fall through
 
 DrawTilemapRect:
@@ -436,7 +430,7 @@ DrawTilemapRect:
 		ld b, c
 		ld c, Port_VDPData
 -:		outi
-		ld a, (TilemapRectHighByte)
+		ld a, (RAM_TilemapRectHighByte)
 		nop
 		out (c), a
 		nop
@@ -453,7 +447,7 @@ LoadTiles1bpp:
 	; de = VRAM address
 	; hl = data address
 	; a = palette index to use
-	ld (PaletteIndexFor1bppTiles), a
+	ld (RAM_PaletteIndexFor1bppTiles), a
 	call SetVRAMAddressToDE
 --:
 	ld a, (hl) ; Get byte of data
@@ -461,7 +455,7 @@ LoadTiles1bpp:
 		ld c, Port_VDPData
 		ld b, $04
 		ld h, a
-		ld a, (PaletteIndexFor1bppTiles)
+		ld a, (RAM_PaletteIndexFor1bppTiles)
 -:		rra
 		ld d, h
 		jr c, +
@@ -498,13 +492,14 @@ VDPRegistersData:
 .db $00 $88 
 .db $00 $89 
 .db $00 $8A 
-; Last pair is instead setting the VDP to CRAM writing at index 1
-.dw $c001
+; Last pair is instead setting the VDP to CRAM writing into the tile palette
+.dw 16 | VDP_Mask_Palette
 
-; Unused code
+_UnusedCode:
 	xor a
 	ld (RAM_YScroll), a
 	ld (RAM_XScroll), a
+	di
 
 MaybeUpdateScrollRegisters:
 	; Check flag
@@ -534,9 +529,9 @@ MoveWavingSegaLogoToMiddleOfScreen:
 	; Then some inline colours for the sprites. These are not used in the end.
 	ld a, %110000 ; Blue
 	out (Port_VDPData), a
-	ld a, %110100 ; Cyan
+	ld a, %111000 ; Cyan
 	out (Port_VDPData), a
-	ld a, %110100 ; Blue
+	ld a, %110000 ; Blue
 	out (Port_VDPData), a
 
 	ld hl, SegaLogoPaletteGradientData+15
@@ -562,7 +557,7 @@ MoveWavingSegaLogoToMiddleOfScreen:
 	; Initialise variables?
 	ld hl, $8800 ; Scroll by 88 so the Sega logo is off-screen
 	ld (RAM_YScrollForSegaLogo), hl
-	ld (_RAM_C099_), hl
+	ld (RAM_YScroll - 1), hl ; But set this one to 0
 
 	; This will reset the scroll registers to zero
 	ld hl, RAM_ScrollUpdateNeeded
@@ -580,11 +575,11 @@ MoveWavingSegaLogoToMiddleOfScreen:
 	ld hl, SegaLogoTilemap
 	ld bc, $0308 ; 3x8 size
 	ld a, %00001001 ; High byte for tilemap: high tileset and priority flag
-	ld (TilemapRectHighByte), a
+	ld (RAM_TilemapRectHighByte), a
 	call DrawTilemapRect
 
 	ld a, $0A
-	ld (PaletteRotationTotalCounter), a
+	ld (RAM_PaletteRotationTotalCounter), a
 	
 	; Load 4bpp (gradient effect) Sega logo tiles at tile index 1
 	ld hl, SegaLogoTiles4bpp
@@ -610,7 +605,7 @@ MoveWavingSegaLogoToMiddleOfScreen:
 	; i.e. each set of three tiles is copied, then a gap of the same size, then the three tiles again.
 	; This fills d000..d23f.
 	ld b, 8 ; Column count
-	ld de, SegaLogoRightWayUpWithGap
+	ld de, RAM_SegaLogoRightWayUpWithGap
 	ld hl, SegaLogoTiles1bpp
 -:	push bc
 		push hl
@@ -628,8 +623,8 @@ MoveWavingSegaLogoToMiddleOfScreen:
 	; Next, we produce an upside-down version of the tile data, by copying the data in reverse.
 	; Each tile column is padded opposite to the above, so we have 24 bytes empty, then 24 bytes
 	; for the column upside-down, then another 24 bytes empty.
-	ld hl, SegaLogoTiles1bpp
-	ld de, SegaLogoUpsideDownWithPadding + 3*8 - 1 ; _RAM_D26F_
+	ld hl, SegaLogoTiles1bpp ; Start of tile data
+	ld de, RAM_SegaLogoUpsideDownWithPadding + 3*8*2 - 1 ; Just before the upside-down tile data
 	ld c, 8 ; Columns
 --:	ld b, 3*8 ; Bytes to reverse per column
 -:	ld a, (hl) ; Read top to bottom from source data
@@ -655,8 +650,8 @@ MoveWavingSegaLogoToMiddleOfScreen:
 
 	ld c, 4 ; Loops of the animation
 _WavingLogoStartPosition:
-	ld hl, SegaLogoRightWayUpWithGap
-	ld de, SegaLogoUpsideDownWithPadding + 3*8 - 1
+	ld hl, RAM_SegaLogoRightWayUpWithGap
+	ld de, RAM_SegaLogoUpsideDownWithPadding + 3*8*2 - 1 ; same as above
 	ld b, $30 ; Number of "positions" before resetting
 _WavingLogoNextPosition:
 	push bc
@@ -681,7 +676,7 @@ _WavingLogoNextPosition:
 		pop de
 		pop hl
 		push bc
-			ld bc, 3*8*8 ; Move to next column
+			ld bc, 3*8*3 ; Move to next column
 			add hl, bc
 			ex de, hl
 				add hl, bc
@@ -719,7 +714,7 @@ _WavingLogoNextPosition:
 	; Signal to clear the Sega logo from the tilemap
 	ld (RAM_ClearSegaLogoFlag), a
 	ei
-	ld hl, PaletteRotationTotalCounter
+	ld hl, RAM_PaletteRotationTotalCounter
 
 WaitForValueAtHLToBeZero:
 -:	ld a, (hl)
@@ -736,21 +731,21 @@ MaybeClearSegaLogo:
 	; If non-zero, clear tilemap for the Sega logo
 	ld (hl), 0 ; clear the flag so we do this only once
 	ld l, 0
-	ld de, $3B98 | VDP_Flag_VRAMWrite
+	ld de, $3B98 | VDP_Mask_VRAMWrite
 	ld bc, 16
 	call FillVRAMWithLAtDE
-	ld de, $3BD8 | VDP_Flag_VRAMWrite
+	ld de, $3BD8 | VDP_Mask_VRAMWrite
 	ld bc, 16
 	call FillVRAMWithLAtDE
-	ld de, $3C18 | VDP_Flag_VRAMWrite
+	ld de, $3C18 | VDP_Mask_VRAMWrite
 	ld bc, 16
 	jp FillVRAMWithLAtDE ; and ret
 
 RotatePalette:
 	; Decrement values
-	ld hl, PaletteRotationTotalCounter
+	ld hl, RAM_PaletteRotationTotalCounter
 	dec (hl)
-	ld hl, PaletteRotationFrameCounter
+	ld hl, RAM_PaletteRotationFrameCounter
 	dec (hl)
 	; Exit until the second one goes past 0
 	ret p
@@ -766,16 +761,16 @@ RotatePalette:
 +:	; Use that as a reverse index into SegaLogoPaletteGradientData 
 	ld e, a
 	ld d, 0
-	ld hl, SegaLogoPaletteGradientData+13
+	ld hl, SegaLogoPaletteGradientData+12
 	or a
 	sbc hl, de
-	ld de, 11 | VDP_Mask_Palette ; destination
+	ld de, $11 | VDP_Mask_Palette ; destination
 	ld bc, 12 ; count
 	jp CopyBCBytesFromHLToVRAMAtDE
 
 PointVRAMToSegaLogoArea:
 	push de
-		ld de, $2000 | VDP_Flag_VRAWWrite
+		ld de, $2000 | VDP_Mask_VRAMWrite
 		ld a, e
 		out (Port_VDPAddress), a
 		ld a, d
@@ -789,14 +784,14 @@ SegaLogoTilemap: ; Low bytes only
 .db $02 $05 $08 $0B $0E $11 $14 $17
 
 SegaLogoTiles1bpp:
-.incbin "Sega logo.1bpp"
+.incbin "segalogo.1bpp"
 
 SegaLogoPaletteGradientData:
 .db $3F $3E $3C $38 $34 $30 $20 $30 $34 $38 $3C $3E 
 .db $3F $3E $3C $38 $34 $30 $20 $30 $34 $38 $3C $3E
 
 SegaLogoTiles4bpp:
-.incbin "Sega logo.bin"
+.incbin "segalogo.bin"
 
 MasterSystemTilemap: ; Foreground bit is not set 
 ;   M           A           S           T           E           R           space S           Y           S           T           E           M
@@ -877,7 +872,7 @@ MaybeLoadPalette:
 
 MaybeScrollMasterSystemLogo:
 	; Check for flag low bit
-	ld a, (LogoScrollingControl)
+	ld a, (RAM_LogoScrollingControl)
 	rrca
 	ret nc
 
@@ -936,24 +931,24 @@ MaybeScrollMasterSystemLogo:
 _scrollDone:
 	; Clear the flag
 	xor a
-	ld (LogoScrollingControl), a
+	ld (RAM_LogoScrollingControl), a
 	ret
 
 MaybeScrollLogosApart:
 	; Check high bit of this flag
-	ld a, (LogoScrollingControl)
+	ld a, (RAM_LogoScrollingControl)
 	rlca
 	ret nc
 	; Signal an update
 	ld hl, RAM_ScrollUpdateNeeded
 	ld (hl), $FF
 	; Decrement the line counter
-	ld hl, YScrollDeltaCounter
+	ld hl, RAM_YScrollDeltaCounter
 	dec (hl)
 	jr nz, +
 	; Clear the flag when done. This will stop this code running on subsequent frames.
 	xor a
-	ld (LogoScrollingControl), a
+	ld (RAM_LogoScrollingControl), a
 +:	; Scroll up by one 
 	ld hl, RAM_YScroll
 	dec (hl)
@@ -974,3 +969,5 @@ MaybeScrollLogosApart:
 
 FontTiles1bpp:
 .incbin "font.1bpp"
+
+End:
